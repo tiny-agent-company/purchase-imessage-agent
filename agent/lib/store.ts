@@ -94,3 +94,20 @@ export async function rememberCatalog(conversationId: string, products: Product[
 export async function catalogFor(conversationId: string): Promise<Product[] | null> {
   return (await redis().get<Product[]>(k(`catalog:${conversationId}`))) ?? null;
 }
+
+// ── Pending approvals ────────────────────────────────────────────────────
+
+export interface PendingApproval {
+  eveSessionId: string;
+  conversationId: string;
+  hash: string;
+}
+
+/** A confirm that paused for the user's passkey: which conversation to resume when the webhook says approved. */
+export async function rememberApproval(authorizationId: string, a: PendingApproval) {
+  await redis().set(k(`auth:${authorizationId}`), a, { ex: 20 * 60 });
+}
+
+export async function approvalFor(authorizationId: string): Promise<PendingApproval | null> {
+  return (await redis().get<PendingApproval>(k(`auth:${authorizationId}`))) ?? null;
+}

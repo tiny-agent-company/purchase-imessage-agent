@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { defineChannel, POST } from "eve/channels";
 import { agentcard } from "../lib/agentcard";
-import { eveSessionFor, firstTime, mark } from "../lib/store";
+import { approvalFor, eveSessionFor, firstTime, mark } from "../lib/store";
 
 // Agentcard delivers webhooks here (POST /agentcard/webhooks). When a user
 // finishes the Vault link, the event names the vault session; the store maps
@@ -57,6 +57,16 @@ export default defineChannel({
 
       // At-least-once delivery: act on each event id once.
       if (!(await firstTime(`evt:${event.id}`))) return new Response("ok");
+
+      // A checkout approval resumes the purchase that paused for it.
+      if (event.type.startsWith("checkout_authorization.")) {
+        const authId = String(event.data.authorization_id ?? "");
+        const pending = authId ? await approvalFor(authId) : null;
+        if (!pending) return new Response("ok"); // not one of this agent's confirms
+        const text = approvalNote(event, pending);
+        if (text) waitUntil(attachSession(pending.eveSessionId).send(text, { auth: WEBHOOK_AUTH }));
+        return new Response("ok");
+      }
 
       const vs = String(event.data.vault_session_id ?? "");
       const sessionId = vs ? await eveSessionFor(vs) : null;
@@ -137,6 +147,25 @@ async function describe(event: Envelope): Promise<Note | null> {
   }
 
   return null;
+}
+
+/** What the agent hears when the user acts on an approval link. */
+function approvalNote(event: Envelope, p: { conversationId: string; hash: string }): string | null {
+  const d = event.data;
+  const amount = typeof d.amount_display === "string" ? d.amount_display : "";
+  switch (event.type) {
+    case "checkout_authorization.approved":
+      return (
+        `[Agentcard] The user approved the purchase${amount ? ` (${amount})` : ""} with their passkey. ` +
+        `Call buy now with confirm "${p.hash}" on conversation "${p.conversationId}" to place the order, then tell them the result. Do not ask them anything first.`
+      );
+    case "checkout_authorization.declined":
+      return `[Agentcard] The user declined the purchase on the approval page${d.reason ? ` (${d.reason})` : ""}. Tell them it was not placed and ask what they would like to do.`;
+    case "checkout_authorization.expired":
+      return `[Agentcard] The approval link expired before the user approved. Tell them, and offer to send a new one (a new confirm produces one).`;
+    default:
+      return null;
+  }
 }
 
 function brand(value: unknown): string {

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { agentcardAs, AgentcardError } from "../lib/agentcard";
 import { phoneOf, userToken } from "../lib/user";
 import { sendText } from "../lib/linq";
-import { catalogFor, rememberCatalog, type Product } from "../lib/store";
+import { catalogFor, rememberApproval, rememberCatalog, type Product } from "../lib/store";
 
 // One turn of Agentcard's Purchase API (POST /buy): an ask builds or refines
 // a cart at a real merchant; a confirm places it. Runs as the connected user.
@@ -111,6 +111,10 @@ export default defineTool({
     if (r.approval_url) {
       await sendText(phone, r.approval_url);
       approvalLinkSent = true;
+      // When Agentcard's webhook says this authorization was approved, the
+      // conversation resumes on its own with the same confirm.
+      const id = new URL(r.approval_url).searchParams.get("id");
+      if (id && confirm) await rememberApproval(id, { eveSessionId: ctx.session.id, conversationId: r.conversation_id, hash: confirm });
     }
 
     return {
