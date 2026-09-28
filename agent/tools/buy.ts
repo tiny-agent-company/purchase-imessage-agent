@@ -2,6 +2,7 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { agentcardAs, AgentcardError } from "../lib/agentcard";
 import { phoneOf, userToken } from "../lib/user";
+import { catalogFor, rememberCatalog, type Product } from "../lib/store";
 
 // One turn of Agentcard's Purchase API (POST /buy): an ask builds or refines
 // a cart at a real merchant; a confirm places it. Runs as the connected user.
@@ -85,22 +86,29 @@ export default defineTool({
       throw e;
     }
 
+    // Product ids are the merchant's own links (for Amazon, the /dp URL) and
+    // image_url is the product photo. They are the ONLY links and images the
+    // agent may send; it must never make one up. A turn that does not search
+    // again returns no catalog, so the last search is kept per conversation.
+    let products: Product[] | undefined;
+    if (r.catalog?.items?.length) {
+      products = r.catalog.items.slice(0, 8).map((i) => ({
+        name: i.name,
+        price: i.priceCents != null ? money(i.priceCents) : undefined,
+        ...(isUrl(i.id) ? { url: i.id } : { id: i.id }),
+        ...(isUrl(i.image_url) ? { image_url: i.image_url } : {}),
+      }));
+      await rememberCatalog(r.conversation_id, products);
+    } else {
+      products = (await catalogFor(r.conversation_id)) ?? undefined;
+    }
+
     return {
       status: r.status,
       conversation_id: r.conversation_id,
       reply: r.reply,
       cart: r.cart ? summarize(r.cart) : null,
-      // Product ids are the merchant's own links (for Amazon, the /dp URL) and
-      // image_url is the product photo. They are the ONLY links and images the
-      // agent may send; it must never make one up.
-      products: r.catalog?.items?.length
-        ? r.catalog.items.slice(0, 8).map((i) => ({
-            name: i.name,
-            price: i.priceCents != null ? money(i.priceCents) : undefined,
-            ...(isUrl(i.id) ? { url: i.id } : { id: i.id }),
-            ...(isUrl(i.image_url) ? { image_url: i.image_url } : {}),
-          }))
-        : undefined,
+      products,
       unmatched: r.unmatched?.length ? r.unmatched : undefined,
       decline_code: r.decline_code ?? undefined,
       approval_url: r.approval_url ?? undefined,

@@ -75,3 +75,22 @@ export async function connectionFor(phone: string): Promise<Connection | null> {
 export async function forgetConnection(phone: string) {
   await redis().del(k(`user:${phone}`));
 }
+
+// ── Purchase catalog ─────────────────────────────────────────────────────
+
+export interface Product {
+  name?: string;
+  price?: string;
+  url?: string;
+  id?: string;
+  image_url?: string;
+}
+
+/** The last product search of a purchase conversation, for turns that do not search again. */
+export async function rememberCatalog(conversationId: string, products: Product[]) {
+  await redis().set(k(`catalog:${conversationId}`), products, { ex: DAY });
+}
+
+export async function catalogFor(conversationId: string): Promise<Product[] | null> {
+  return (await redis().get<Product[]>(k(`catalog:${conversationId}`))) ?? null;
+}
