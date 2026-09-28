@@ -106,9 +106,10 @@ export default defineTool({
 
     // Agentcard places a vault order itself the instant the approval lands, and
     // a confirm that arrives while that placement is still running is turned
-    // away as an uncoded error rather than placed twice. Give it a moment and
-    // read the conversation back before telling the user anything.
-    if (confirm && (r.status as string) === "error" && !r.decline_code) {
+    // away (decline_code `in_progress`, or no code on older deployments) rather
+    // than placed twice. Give it a moment and read the conversation back before
+    // telling the user anything.
+    if (confirm && (r.status as string) === "error" && (!r.decline_code || r.decline_code === "in_progress")) {
       await new Promise((res) => setTimeout(res, 12_000));
       const conv = await agentcardAs<{ orders?: { order_id?: string; id?: string; merchant_name?: string }[]; last_checkout?: Partial<BuyResponse> | null }>(
         conn.access_token,
