@@ -1,6 +1,8 @@
-// Minimal Agentcard API client for the Vault. Exchanges the organization's
-// client credentials for an access token and caches it until shortly before
-// it expires. The Vault endpoints reject API keys; they need this token.
+// Agentcard API client. Two kinds of bearer:
+//   - the ORGANIZATION token (client credentials) creates Vault links, connects
+//     users and registers webhooks;
+//   - a USER token (from connect/verify) is what /buy runs as, because a
+//     purchase is always one person's.
 
 const API_URL = process.env.AGENTCARD_API_URL ?? "https://api.agentcard.sh";
 
@@ -31,15 +33,59 @@ export async function orgToken(): Promise<string> {
   return cached.token;
 }
 
-export async function agentcard<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
+export class AgentcardError extends Error {
+  constructor(
+    readonly status: number,
+    readonly body: unknown,
+  ) {
+    super(`Agentcard ${status}: ${typeof body === "string" ? body : JSON.stringify(body)}`);
+  }
+}
+
+async function call<T>(
+  bearer: string,
+  method: "GET" | "POST",
+  path: string,
+  body?: unknown,
+  timeoutMs = 30_000,
+): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     method,
     headers: {
-      Authorization: `Bearer ${await orgToken()}`,
+      Authorization: `Bearer ${bearer}`,
       ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(timeoutMs),
   });
-  if (!res.ok) throw new Error(`Agentcard ${method} ${path} failed: ${res.status} ${await res.text()}`);
-  return (await res.json()) as T;
+  const text = await res.text();
+  let parsed: unknown = text;
+  try {
+    parsed = text ? JSON.parse(text) : {};
+  } catch {
+    /* keep the raw text */
+  }
+  if (!res.ok) throw new AgentcardError(res.status, parsed);
+  return parsed as T;
+}
+
+/** Call with the organization token. */
+export async function agentcard<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
+  return call<T>(await orgToken(), method, path, body);
+}
+
+/** Call as a user. `/buy` turns run against a live merchant, so allow two minutes. */
+export async function agentcardAs<T>(
+  userToken: string,
+  method: "GET" | "POST",
+  path: string,
+  body?: unknown,
+  timeoutMs = 120_000,
+): Promise<T> {
+  return call<T>(userToken, method, path, body, timeoutMs);
+}
+
+/** True when the org credentials are sandbox ones (the connect code is then fixed). */
+export function isSandbox(): boolean {
+  return (process.env.AGENTCARD_MODE ?? "sandbox") !== "production";
 }

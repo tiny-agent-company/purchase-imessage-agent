@@ -1,48 +1,56 @@
-# vault-imessage-agent
+# purchase-imessage-agent
 
-The smallest iMessage agent that can enroll a user's card in the [Agentcard Vault](https://docs.agentcard.sh/vault/quickstart).
+An iMessage agent that shops at real merchants through [Agentcard's Purchase API](https://docs.agentcard.sh/vault/integrations/ecommerce-apis/purchase-api) and pays with the user's own card from the Agentcard Vault.
+
+Built from [vault-imessage-agent](https://github.com/tiny-agent-company/vault-imessage-agent): same stack, plus the purchase loop.
 
 - **[eve](https://github.com/vercel/eve)** (Vercel's agent framework) runs the agent and hosts it on Vercel.
 - **[Linq](https://linqapp.com)** gives the agent a phone number and delivers iMessage/SMS in and out.
-- **Agentcard** issues the Vault link; the user stores a card once and approves each later purchase with Face ID or Touch ID. Its webhook tells the agent the moment the card is stored, and the agent says so in the thread.
-- **Upstash Redis** (one click on the Vercel Marketplace) remembers which conversation sent each link, so the webhook can find it.
+- **Agentcard** connects the user by text, builds the cart at the merchant, and charges the vaulted card after a passkey approval.
+- **Upstash Redis** remembers the user's connection and which conversation sent each Vault link.
 
-This repo is a blueprint. Clone it, drop in two sets of credentials, deploy. The step-by-step guide lives at [docs.agentcard.sh → Guides → Create an iMessage agent and connect the Vault](https://docs.agentcard.sh/guides/create-an-imessage-agent-and-connect-the-vault).
+The step-by-step guide lives at [docs.agentcard.sh → Guides → Integrate the Purchase API into an iMessage agent](https://docs.agentcard.sh/guides/integrate-the-purchase-api-into-an-imessage-agent).
 
 ## What is in here
 
 ```
 agent/
   agent.ts                    model (Vercel AI Gateway id)
-  instructions.md             how the agent talks and when it enrolls a card
+  instructions.md             how the agent shops: connect once, ask → cart → confirm
   channels/linq.ts            inbound iMessage/SMS via Linq webhooks
-  lib/agentcard.ts            client-credentials token + fetch wrapper
+  channels/agentcard.ts       POST /agentcard/webhooks: card-stored events wake the conversation
+  lib/agentcard.ts            org token + user-token calls (/buy runs as the user)
+  lib/user.ts                 the phone behind the conversation, connection refresh
   lib/linq.ts                 texts a message from the agent's Linq number
-  lib/store.ts                Upstash Redis: vault session id → eve session id
-  channels/agentcard.ts       POST /agentcard/webhooks: verifies the signature, wakes the conversation
-  tools/create_vault_link.ts  POST /api/v2/vault_sessions → texts the link as its own message
-  tools/check_vault_session.ts GET /api/v2/vault_sessions/:id → pending | linked | expired
+  lib/store.ts                Upstash Redis: connections, connect attempts, vault sessions
+  tools/connect_user.ts       POST /api/v2/connect/start → Agentcard texts a code
+  tools/verify_code.ts        POST /api/v2/connect/verify → the user token buy runs as
+  tools/buy.ts                POST /buy: ask, follow up, confirm a cart hash
+  tools/create_vault_link.ts  Vault link bound to the connected user, texted as its own message
+  tools/check_vault_session.ts GET /api/v2/vault_sessions/:id
 ```
 
 ## Run it
 
 ```bash
 npm install
-cp .env.example .env.local   # fill in Linq + Agentcard credentials
-npm run dev                  # eve terminal UI; chat with the agent locally
+cp .env.example .env.local   # fill in Linq + Agentcard credentials, Redis
+npm run dev                  # eve terminal UI
 npm run deploy               # eve deploy → Vercel
 ```
 
-The Linq channel needs `LINQ_API_KEY` at build time, so add the Vercel env vars before the first deploy (`npx eve link`, then `vercel env add …`). After the first deploy, create a Linq webhook subscription (`message.received`) pointing at `https://<your-deployment>/eve/v1/linq`, store the returned `whsec_` as `LINQ_WEBHOOK_SECRET`, and deploy once more.
+The Linq channel needs `LINQ_API_KEY` at build time, so add the Vercel env vars before the first deploy (`npx eve link`, then `vercel env add …`). After the first deploy, create a Linq webhook (`message.received`) and an Agentcard webhook endpoint (`vault.*`) pointing at the deployment, store their secrets, and deploy once more.
 
 ## Environment
 
 | Variable | From |
 | --- | --- |
-| `LINQ_API_KEY` | Linq dashboard → Developer Tools → Your API Token (sandbox: dashboard.linqapp.com/sandbox) |
-| `LINQ_WEBHOOK_SECRET` | Returned once when you create the webhook subscription |
+| `LINQ_API_KEY` | Linq dashboard → Developer Tools → Your API Token |
+| `LINQ_WEBHOOK_SECRET` | Returned once when you create the Linq webhook subscription |
 | `AGENTCARD_CLIENT_ID` / `AGENTCARD_CLIENT_SECRET` | Shown during Agentcard onboarding; later under Settings → Developers → Credentials |
+| `AGENTCARD_MODE` | `sandbox` (default; connect code is always `111111`, confirm ends in `sandbox_mode`) or `production` |
 | `AGENTCARD_WEBHOOK_SECRET` | Returned once by `POST /api/v2/webhook_endpoints` for `https://<deployment>/agentcard/webhooks` |
-| `KV_REST_API_URL` / `KV_REST_API_TOKEN` | Set by the Vercel Marketplace when you add Upstash for Redis |
+| `KV_REST_API_URL` / `KV_REST_API_TOKEN` | Upstash Redis (Vercel Marketplace or console.upstash.com) |
+| `STORE_PREFIX` | Optional key prefix when several agents share one Redis |
 
 The model runs through the Vercel AI Gateway (`agent/agent.ts`). On Vercel it authenticates with the project's OIDC token; locally, run `npm run dev` and sign in with `/login`.

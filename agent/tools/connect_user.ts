@@ -1,0 +1,35 @@
+import { defineTool } from "eve/tools";
+import { z } from "zod";
+import { agentcard, isSandbox } from "../lib/agentcard";
+import { phoneOf } from "../lib/user";
+import { connectionFor, rememberConnectAttempt } from "../lib/store";
+
+// Step one of buying: Agentcard texts the user a one-time code, they text it
+// back here, and verify_code turns that into the connection every /buy call
+// runs as. Once per user, then remembered for 30 days.
+
+export default defineTool({
+  description:
+    "Start connecting the user to Agentcard so the agent can shop as them. Agentcard sends a six-digit code to the number this conversation is with; the user texts it back and you call verify_code. Returns already_connected when there is nothing to do.",
+  inputSchema: z.object({}),
+  label: { start: () => "Send the user a sign-in code" },
+  async execute(_input, ctx) {
+    const phone = phoneOf(ctx);
+    if (await connectionFor(phone)) return { already_connected: true };
+
+    const attempt = await agentcard<{ id: string; channel: string; expires_at: string }>(
+      "POST",
+      "/api/v2/connect/start",
+      { phone },
+    );
+    await rememberConnectAttempt(phone, attempt.id);
+
+    return {
+      already_connected: false,
+      sent_to: phone,
+      expires_at: attempt.expires_at,
+      // Sandbox never sends a real text; the code is fixed so anyone can test.
+      ...(isSandbox() ? { sandbox_code: "111111", note: "Sandbox: no text is sent. Tell the user the code is 111111." } : {}),
+    };
+  },
+});
