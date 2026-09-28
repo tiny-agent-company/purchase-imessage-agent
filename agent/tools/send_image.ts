@@ -11,7 +11,7 @@ export default defineTool({
   }),
   label: { start: () => "Send an image" },
   async execute({ image_url }, ctx) {
-    await sendMedia(phoneOf(ctx), image_url);
+    await sendMedia(await phoneOf(ctx), image_url);
     return { sent: true };
   },
 });

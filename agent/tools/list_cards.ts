@@ -13,7 +13,7 @@ export default defineTool({
   inputSchema: z.object({}),
   label: { start: () => "Check the user's cards" },
   async execute(_input, ctx) {
-    const conn = await userToken(phoneOf(ctx));
+    const conn = await userToken(await phoneOf(ctx));
     if (!conn) return { status: "not_connected" };
     const r = await agentcard<{ data?: { id: string; brand?: string; last4?: string; exp_month?: number; exp_year?: number }[] }>(
       "GET",

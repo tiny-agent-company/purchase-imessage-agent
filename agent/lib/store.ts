@@ -111,3 +111,18 @@ export async function rememberApproval(authorizationId: string, a: PendingApprov
 export async function approvalFor(authorizationId: string): Promise<PendingApproval | null> {
   return (await redis().get<PendingApproval>(k(`auth:${authorizationId}`))) ?? null;
 }
+
+// ── Phone per conversation ───────────────────────────────────────────────
+
+/**
+ * The phone behind an eve session. A turn started by a text carries it in the
+ * Linq auth context; a turn started by an Agentcard webhook carries none, so
+ * every Linq turn writes it here and webhook turns read it back.
+ */
+export async function rememberPhone(eveSessionId: string, phone: string) {
+  await redis().set(k(`session:${eveSessionId}`), phone, { ex: 30 * DAY });
+}
+
+export async function phoneForSession(eveSessionId: string): Promise<string | null> {
+  return (await redis().get<string>(k(`session:${eveSessionId}`))) ?? null;
+}

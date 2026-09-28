@@ -2,13 +2,23 @@
 // context) and a live connection token, refreshed when it is about to expire.
 
 import { agentcard, AgentcardError } from "./agentcard";
-import { connectionFor, forgetConnection, saveConnection, type Connection } from "./store";
+import { connectionFor, forgetConnection, phoneForSession, rememberPhone, saveConnection, type Connection } from "./store";
 
-/** The E.164 number the current message came from, from the Linq channel's auth. */
-export function phoneOf(ctx: { session: { auth: { current: { attributes?: Record<string, unknown> } | null } } }): string {
+/**
+ * The E.164 number of the user in this conversation. A text from them carries
+ * it in the Linq channel's auth; a turn that an Agentcard webhook woke (card
+ * stored, purchase approved) carries no Linq auth at all, so the number is
+ * remembered per eve session on every text and read back on those turns.
+ */
+export async function phoneOf(ctx: { session: { id: string; auth: { current: { attributes?: Record<string, unknown> } | null } } }): Promise<string> {
   const phone = ctx.session.auth.current?.attributes?.user_name;
-  if (typeof phone !== "string" || !phone) throw new Error("No phone number on this conversation");
-  return phone;
+  if (typeof phone === "string" && phone) {
+    await rememberPhone(ctx.session.id, phone).catch(() => undefined);
+    return phone;
+  }
+  const remembered = await phoneForSession(ctx.session.id);
+  if (remembered) return remembered;
+  throw new Error("No phone number on this conversation");
 }
 
 /**

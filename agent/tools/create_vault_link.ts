@@ -22,7 +22,7 @@ export default defineTool({
   }),
   label: { start: () => "Text a Vault link" },
   async execute({ force }, ctx) {
-    const phone = phoneOf(ctx);
+    const phone = await phoneOf(ctx);
     // Bind the link to the connected user, so the card lands on the account
     // /buy runs as. An open link would enroll a separate, contactless user.
     const conn = await userToken(phone);

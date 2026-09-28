@@ -20,7 +20,7 @@ export default defineTool({
   }),
   label: { start: ({ email }) => (email ? "Email the user a sign-in code" : "Text the user a sign-in code") },
   async execute({ email }, ctx) {
-    const phone = phoneOf(ctx);
+    const phone = await phoneOf(ctx);
     if (await connectionFor(phone)) return { already_connected: true };
 
     const attempt = await agentcard<{ id: string; channel: string; expires_at: string }>(

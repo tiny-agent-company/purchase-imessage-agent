@@ -12,7 +12,7 @@ export default defineTool({
   }),
   label: { start: () => "Verify the sign-in code" },
   async execute({ code }, ctx) {
-    const phone = phoneOf(ctx);
+    const phone = await phoneOf(ctx);
     const connectId = await connectAttemptFor(phone);
     if (!connectId) return { ok: false, reason: "no_attempt" };
 

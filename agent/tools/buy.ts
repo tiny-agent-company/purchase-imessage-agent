@@ -56,7 +56,7 @@ export default defineTool({
     start: ({ ask, confirm }) => (confirm ? "Place the order" : `Shop: ${(ask ?? "").slice(0, 60)}`),
   },
   async execute({ ask, conversation_id, confirm }, ctx) {
-    const phone = phoneOf(ctx);
+    const phone = await phoneOf(ctx);
     const conn = await userToken(phone);
     if (!conn) return { status: "not_connected", next: "Call connect_user, then verify_code with the code the user texts." };
 

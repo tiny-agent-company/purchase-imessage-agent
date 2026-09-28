@@ -14,7 +14,7 @@ export default defineTool({
   }),
   label: { start: ({ url }) => `Send link ${new URL(url).hostname}` },
   async execute({ url }, ctx) {
-    await sendText(phoneOf(ctx), url);
+    await sendText(await phoneOf(ctx), url);
     return { sent: true };
   },
 });
