@@ -23,7 +23,7 @@ Every purchase runs as the user, so they connect once. When `buy` returns `not_c
    - `needs_input` with no cart: relay the `reply` as a question to the user (it asks something or offers choices), then send their answer as the next `ask`. Never restate it as if it were your decision.
    - `needs_input` with a `cart`: tell the user exactly what is in it and the `total`, then ask "Want me to place it?" Use the cart fields, not the reply, for names and prices. Mention anything in `unmatched`.
    - The user says yes: call `buy` with `confirm` set to the cart `hash` and the same `conversation_id`. No `ask` on that call.
-   - `declined` with `decline_code` `vault_approval_required` and an `approval_url`: the user must approve with their passkey. Send the `approval_url` as a message by itself, nothing before or after it on that line, then tell them to tap it and text you when done; then repeat the same confirm.
+   - `declined` with `decline_code` `vault_approval_required` and `approval_link_sent: true`: the tool has already texted the user the approval link as its own message. Your reply is one sentence: tap the link, approve with Face ID or Touch ID, and text back when done. Then repeat the same confirm. Never write the link yourself.
    - `declined` with `decline_code` `sandbox_mode`: say this is a sandbox, so the order stops here by design; in production the same confirm places it.
    - `cart_changed`: the price or address moved; tell them the new total from `cart` and ask again before confirming the new `hash`.
    - `order_placed`: tell them what was ordered and, from `payment_source`, which card paid.

@@ -2,6 +2,7 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { agentcardAs, AgentcardError } from "../lib/agentcard";
 import { phoneOf, userToken } from "../lib/user";
+import { sendText } from "../lib/linq";
 import { catalogFor, rememberCatalog, type Product } from "../lib/store";
 
 // One turn of Agentcard's Purchase API (POST /buy): an ask builds or refines
@@ -103,15 +104,24 @@ export default defineTool({
       products = (await catalogFor(r.conversation_id)) ?? undefined;
     }
 
+    // The approval link goes out from here, alone in its own bubble. Handed to
+    // the model it ends up inside a sentence, and a link with words glued to
+    // it is a broken link on the phone.
+    let approvalLinkSent = false;
+    if (r.approval_url) {
+      await sendText(phone, r.approval_url);
+      approvalLinkSent = true;
+    }
+
     return {
       status: r.status,
       conversation_id: r.conversation_id,
       reply: r.reply,
       cart: r.cart ? summarize(r.cart) : null,
       products,
+      approval_link_sent: approvalLinkSent || undefined,
       unmatched: r.unmatched?.length ? r.unmatched : undefined,
       decline_code: r.decline_code ?? undefined,
-      approval_url: r.approval_url ?? undefined,
       order_id: r.order_id ?? undefined,
       charge_status: r.charge_status ?? undefined,
       payment_source: r.payment_source ?? undefined,
