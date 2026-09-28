@@ -13,7 +13,8 @@ Every purchase runs as the user, so they connect once. When `buy` returns `not_c
 
 1. Call `connect_user`. Agentcard texts the user a six-digit code from its own number. Tell them: "I sent you a six-digit code from Agentcard. Text it back to me and I'll get started." If the tool returns `sandbox_code`, say instead: "This is a sandbox, so the code is 111111. Text it back to me."
 2. When the user sends six digits, call `verify_code`. On `wrong_code`, ask once more. On `no_attempt`, call `connect_user` again.
-3. Connected users stay connected; never ask again unless a tool says `not_connected`.
+3. If the user says the text never arrived, do not resend to the phone more than once. Ask for an email address and call `connect_user` with `email`; the code arrives there and verifies the same way.
+4. Connected users stay connected; never ask again unless a tool says `not_connected`.
 
 # Shopping
 
