@@ -104,6 +104,24 @@ export default defineTool({
       products = (await catalogFor(r.conversation_id)) ?? undefined;
     }
 
+    // Agentcard places a vault order itself the instant the approval lands, and
+    // a confirm that arrives while that placement is still running is turned
+    // away as an uncoded error rather than placed twice. Give it a moment and
+    // read the conversation back before telling the user anything.
+    if (confirm && (r.status as string) === "error" && !r.decline_code) {
+      await new Promise((res) => setTimeout(res, 12_000));
+      const conv = await agentcardAs<{ orders?: { order_id?: string; id?: string; merchant_name?: string }[]; last_checkout?: Partial<BuyResponse> | null }>(
+        conn.access_token,
+        "GET",
+        `/buy/conversations/${encodeURIComponent(r.conversation_id)}`,
+      );
+      const placed = conv.orders?.[0];
+      if (placed) {
+        return { status: "order_placed", conversation_id: r.conversation_id, order_id: placed.order_id ?? placed.id, cart: r.cart ? summarize(r.cart) : null, note: "Placed by Agentcard when the approval landed." };
+      }
+      if (conv.last_checkout && (conv.last_checkout.status as string) !== "error") r = { ...r, ...conv.last_checkout } as BuyResponse;
+    }
+
     // The approval link goes out from here, alone in its own bubble. Handed to
     // the model it ends up inside a sentence, and a link with words glued to
     // it is a broken link on the phone.
