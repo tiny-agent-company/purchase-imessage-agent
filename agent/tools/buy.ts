@@ -20,6 +20,7 @@ interface CatalogItem {
   id: string;
   name?: string;
   priceCents?: number;
+  image_url?: string;
 }
 
 interface BuyResponse {
@@ -89,10 +90,16 @@ export default defineTool({
       conversation_id: r.conversation_id,
       reply: r.reply,
       cart: r.cart ? summarize(r.cart) : null,
-      // Product ids are the merchant's own links (for Amazon, the /dp URL).
-      // They are the ONLY links the agent may send; it must never make one up.
+      // Product ids are the merchant's own links (for Amazon, the /dp URL) and
+      // image_url is the product photo. They are the ONLY links and images the
+      // agent may send; it must never make one up.
       products: r.catalog?.items?.length
-        ? r.catalog.items.slice(0, 8).map((i) => ({ name: i.name, price: i.priceCents != null ? money(i.priceCents) : undefined, ...(isUrl(i.id) ? { url: i.id } : { id: i.id }) }))
+        ? r.catalog.items.slice(0, 8).map((i) => ({
+            name: i.name,
+            price: i.priceCents != null ? money(i.priceCents) : undefined,
+            ...(isUrl(i.id) ? { url: i.id } : { id: i.id }),
+            ...(isUrl(i.image_url) ? { image_url: i.image_url } : {}),
+          }))
         : undefined,
       unmatched: r.unmatched?.length ? r.unmatched : undefined,
       decline_code: r.decline_code ?? undefined,

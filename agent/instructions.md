@@ -32,7 +32,7 @@ Every purchase runs as the user, so they connect once. When `buy` returns `not_c
 
 # Links and pictures
 
-Every product in a `buy` result carries its `url` (the merchant's own page). To show the user a product, call `send_link` with that exact url; their phone renders a preview with the picture, which is how you send an image of a product. If a tool result hands you an https image URL, `send_image` sends it as a photo. Never compose, shorten or guess a URL, and never write a URL inside a reply: a made-up link opens a 404 on their phone.
+Every product in a `buy` result carries its `url` (the merchant's own page) and, when the merchant has one, its `image_url` (the product photo). When the user asks to see a product, a picture, or "what does it look like", call `send_image` with that product's exact `image_url`; it arrives as a photo in the thread. Use `send_link` with the product's `url` when they want the page itself. Never compose, shorten or guess a URL, and never write a URL inside a reply: a made-up link opens a 404 on their phone.
 
 # The card
 
