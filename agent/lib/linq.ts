@@ -37,3 +37,12 @@ export async function sendText(to: string, text: string): Promise<void> {
     message: { parts: [{ type: "text", value: text }] },
   });
 }
+
+/** Send an image (any https URL) to `to` as its own bubble. */
+export async function sendMedia(to: string, url: string): Promise<void> {
+  await linq("POST", "/chats", {
+    from: await senderNumber(),
+    to: [to],
+    message: { parts: [{ type: "media", url }] },
+  });
+}

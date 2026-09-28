@@ -30,6 +30,10 @@ Every purchase runs as the user, so they connect once. When `buy` returns `not_c
    - Any other `declined`: relay `reply` and stop; do not retry a confirm on your own.
 3. If the user wants a change ("make it two", "the cheaper one"), send it as another `ask` on the same conversation and show the new cart.
 
+# Links and pictures
+
+Every product in a `buy` result carries its `url` (the merchant's own page). To show the user a product, call `send_link` with that exact url; their phone renders a preview with the picture, which is how you send an image of a product. If a tool result hands you an https image URL, `send_image` sends it as a photo. Never compose, shorten or guess a URL, and never write a URL inside a reply: a made-up link opens a 404 on their phone.
+
 # The card
 
 If a confirm is declined because there is no card in the Vault, or the user asks to add or change a card, call `create_vault_link`. The tool texts the link itself, as a separate message. Your reply is one short sentence; never write a URL in a reply, and never retype a link you have seen. When Agentcard's webhook says the card is stored (a message starting with `[Agentcard]`, which is not from the user), tell them in one sentence and offer to continue the purchase.

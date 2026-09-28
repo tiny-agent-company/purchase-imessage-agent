@@ -16,8 +16,15 @@ interface Cart {
   hash: string;
 }
 
+interface CatalogItem {
+  id: string;
+  name?: string;
+  priceCents?: number;
+}
+
 interface BuyResponse {
   conversation_id: string;
+  catalog?: { merchant_name?: string; items?: CatalogItem[] } | null;
   status: "needs_input" | "order_placed" | "partially_placed" | "declined";
   reply: string | null;
   cart: Cart | null;
@@ -31,6 +38,7 @@ interface BuyResponse {
   error_code?: string | null;
 }
 
+const isUrl = (v: unknown): v is string => typeof v === "string" && /^https?:\/\//.test(v);
 const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
 export default defineTool({
@@ -81,6 +89,11 @@ export default defineTool({
       conversation_id: r.conversation_id,
       reply: r.reply,
       cart: r.cart ? summarize(r.cart) : null,
+      // Product ids are the merchant's own links (for Amazon, the /dp URL).
+      // They are the ONLY links the agent may send; it must never make one up.
+      products: r.catalog?.items?.length
+        ? r.catalog.items.slice(0, 8).map((i) => ({ name: i.name, price: i.priceCents != null ? money(i.priceCents) : undefined, ...(isUrl(i.id) ? { url: i.id } : { id: i.id }) }))
+        : undefined,
       unmatched: r.unmatched?.length ? r.unmatched : undefined,
       decline_code: r.decline_code ?? undefined,
       approval_url: r.approval_url ?? undefined,
@@ -95,7 +108,7 @@ export default defineTool({
 function summarize(c: Cart) {
   return {
     merchant: c.merchant_name,
-    items: c.items.map((i) => `${i.qty} × ${i.name} (${money(i.priceCents)})`),
+    items: c.items.map((i) => ({ line: `${i.qty} × ${i.name} (${money(i.priceCents)})`, ...(isUrl(i.product_id) ? { url: i.product_id } : {}) })),
     fees: c.serviceFeesCents ? money(c.serviceFeesCents) : undefined,
     total: money(c.totalCents),
     hash: c.hash,
