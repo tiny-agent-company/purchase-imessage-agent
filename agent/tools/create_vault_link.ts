@@ -16,7 +16,7 @@ interface VaultSession {
 
 export default defineTool({
   description:
-    "Text the user a link to store a card in the Agentcard Vault, the card buy pays with. Refuses (returning the cards) when the connected user already has cards, unless `force` is set because the user wants to add another. For a connected user the link is bound to their account (they confirm a code on the page); otherwise it is an open link that enrolls a new vault.",
+    "Text the user a link to store a card in the Agentcard Vault, the card buy pays with. For a NEW user this is the first step and the whole sign-up: the open link enrolls them with a passkey, no code, and when the card lands the agent is connected to them automatically (a webhook says so). For a connected user the link is bound to their account. Refuses (returning the cards) when the connected user already has cards, unless `force` is set because the user wants to add another.",
   inputSchema: z.object({
     force: z.boolean().optional().describe("Send a link even though the user already has cards: only when they asked to add or replace one"),
   }),

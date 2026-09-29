@@ -58,7 +58,7 @@ export default defineTool({
   async execute({ ask, conversation_id, confirm }, ctx) {
     const phone = await phoneOf(ctx);
     const conn = await userToken(phone);
-    if (!conn) return { status: "not_connected", next: "Call connect_user, then verify_code with the code the user texts." };
+    if (!conn) return { status: "not_connected", next: "New user: call create_vault_link; storing a card through it connects them with no code. Only when a webhook said their account already existed: connect_user, then verify_code." };
 
     const body: Record<string, unknown> = {};
     if (conversation_id) body.conversation_id = conversation_id;

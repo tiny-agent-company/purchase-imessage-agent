@@ -10,7 +10,7 @@ import { connectionFor, rememberConnectAttempt } from "../lib/store";
 
 export default defineTool({
   description:
-    "Start connecting the user to Agentcard so the agent can shop as them. Agentcard sends a six-digit code to the number this conversation is with (or to an email address, if the user gives one because the text never arrived); the user sends it back and you call verify_code. Returns already_connected when there is nothing to do.",
+    "The fallback way to connect a user: only when the Vault link could not connect them because their Agentcard account already existed (the webhook says so), or when they say they already have an account. Agentcard sends a six-digit code to the number this conversation is with (or to an email address, if the user gives one because the text never arrived); the user sends it back and you call verify_code. Returns already_connected when there is nothing to do.",
   inputSchema: z.object({
     email: z
       .string()

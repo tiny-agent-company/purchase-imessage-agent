@@ -6,7 +6,7 @@ Built from [vault-imessage-agent](https://github.com/tiny-agent-company/vault-im
 
 - **[eve](https://github.com/vercel/eve)** (Vercel's agent framework) runs the agent and hosts it on Vercel.
 - **[Linq](https://linqapp.com)** gives the agent a phone number and delivers iMessage/SMS in and out.
-- **Agentcard** connects the user by text, builds the cart at the merchant, and charges the vaulted card after a passkey approval.
+- **Agentcard** signs the user up through the Vault link (no code: the linked session is exchanged for the user's tokens), builds the cart at the merchant, and charges the vaulted card after a passkey approval.
 - **Upstash Redis** remembers the user's connection and which conversation sent each Vault link.
 
 The step-by-step guide lives at [docs.agentcard.sh → Guides → Integrate the Purchase API into an iMessage agent](https://docs.agentcard.sh/guides/integrate-the-purchase-api-into-an-imessage-agent).
@@ -18,7 +18,7 @@ agent/
   agent.ts                    model (Vercel AI Gateway id)
   instructions.md             how the agent shops: connect once, ask → cart → confirm
   channels/linq.ts            inbound iMessage/SMS via Linq webhooks
-  channels/agentcard.ts       POST /agentcard/webhooks: card-stored and checkout-approval events wake the conversation
+  channels/agentcard.ts       POST /agentcard/webhooks: on vault.session_linked the session is exchanged for the user's tokens; card-stored and checkout-approval events wake the conversation
   lib/agentcard.ts            org token + user-token calls (/buy runs as the user)
   lib/user.ts                 the phone behind the conversation, connection refresh
   lib/linq.ts                 texts a message from the agent's Linq number

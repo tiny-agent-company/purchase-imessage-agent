@@ -1,7 +1,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { defineChannel, POST } from "eve/channels";
 import { agentcard } from "../lib/agentcard";
-import { approvalFor, eveSessionFor, firstTime, mark } from "../lib/store";
+import { approvalFor, eveSessionFor, firstTime, mark, phoneForSession } from "../lib/store";
+import { connectFromVaultSession } from "../lib/user";
 
 // Agentcard delivers webhooks here (POST /agentcard/webhooks). When a user
 // finishes the Vault link, the event names the vault session; the store maps
@@ -75,7 +76,14 @@ export default defineChannel({
       // Reply 200 now; the agent turn runs after the response is sent.
       waitUntil(
         (async () => {
-          const note = await describe(event);
+          // The link is also the sign-up: once the session is linked, exchange it
+          // for the user's connection tokens, so /buy can run as them with no
+          // code. Both link events try; the first to arrive does it.
+          const phone = await phoneForSession(sessionId);
+          const connection = phone && vs && (event.type === "vault.session_linked" || event.type === "vault.card_stored")
+            ? await connectFromVaultSession(vs, phone)
+            : "skipped";
+          const note = await describe(event, connection);
           if (!note) return;
           // A session_linked notice waits, so a card_stored that follows it
           // speaks first and names the new card; card_stored then marks the
@@ -111,8 +119,12 @@ interface Note {
   delayMs?: number;
 }
 
-async function describe(event: Envelope): Promise<Note | null> {
+async function describe(event: Envelope, connection: "connected" | "needs_code" | "skipped" | "failed"): Promise<Note | null> {
   const d = event.data;
+  const shop =
+    connection === "needs_code"
+      ? "Their Agentcard account already existed, so the link did not connect them: call connect_user to text them a code, then verify_code, before the first purchase."
+      : "They are connected: you can shop for them now.";
   const vs = String(d.vault_session_id ?? "");
   if (!vs) return null;
 
@@ -124,7 +136,7 @@ async function describe(event: Envelope): Promise<Note | null> {
       settles: `notified:${vs}`,
       text:
         `[Agentcard] The user finished the Vault link (session ${vs}). Their ${brand(d.brand)} ending in ${d.last4} is stored ` +
-        `and their user_id is ${d.user_id}. Tell them their card is set up and you can shop for them now, in one sentence.`,
+        `and their user_id is ${d.user_id}. ${shop} Tell them their card is set up, in one sentence.`,
     };
   }
 
@@ -141,8 +153,8 @@ async function describe(event: Envelope): Promise<Note | null> {
       delayMs: 30_000,
       text:
         `[Agentcard] The user finished the Vault link (session ${vs}) by unlocking their existing vault. ` +
-        `Their ${brand(c.brand)} ending in ${c.last4} is ready and their user_id is ${d.user_id}. ` +
-        `Tell them their card is set up and you can shop for them now, in one sentence.`,
+        `Their ${brand(c.brand)} ending in ${c.last4} is ready and their user_id is ${d.user_id}. ${shop} ` +
+        `Tell them their card is set up, in one sentence.`,
     };
   }
 

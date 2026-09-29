@@ -38,6 +38,11 @@ export async function mark(key: string, ttlSeconds = DAY) {
   await redis().set(k(key), 1, { ex: ttlSeconds });
 }
 
+/** Forget a mark, so the next `firstTime` for it is true again. */
+export async function unmark(key: string) {
+  await redis().del(k(key));
+}
+
 /** True the first time a key is seen; false on every repeat within the window. */
 export async function firstTime(key: string, ttlSeconds = DAY): Promise<boolean> {
   const set = await redis().set(k(key), 1, { nx: true, ex: ttlSeconds });
