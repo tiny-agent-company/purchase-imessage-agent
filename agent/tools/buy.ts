@@ -106,19 +106,25 @@ export default defineTool({
 
     // Agentcard places a vault order itself the instant the approval lands, and
     // a confirm that arrives while that placement is still running is turned
-    // away (decline_code `in_progress`, or no code on older deployments) rather
-    // than placed twice. Give it a moment and read the conversation back before
-    // telling the user anything.
-    if (confirm && (r.status as string) === "error" && (!r.decline_code || r.decline_code === "in_progress")) {
+    // away with decline_code `in_progress` (older deployments: an uncoded
+    // status error) rather than placed twice. Give it a moment and read the
+    // conversation back before telling the user anything. The order that
+    // belongs to THIS checkout is last_checkout's; orders[] lists every order
+    // of the conversation oldest first, so its first entry can be an earlier
+    // purchase.
+    const inProgress = r.decline_code === "in_progress" || ((r.status as string) === "error" && !r.decline_code);
+    if (confirm && inProgress) {
       await new Promise((res) => setTimeout(res, 12_000));
-      const conv = await agentcardAs<{ orders?: { order_id?: string; id?: string; merchant_name?: string }[]; last_checkout?: Partial<BuyResponse> | null }>(
-        conn.access_token,
-        "GET",
-        `/buy/conversations/${encodeURIComponent(r.conversation_id)}`,
-      );
-      const placed = conv.orders?.[0];
-      if (placed) {
-        return { status: "order_placed", conversation_id: r.conversation_id, order_id: placed.order_id ?? placed.id, cart: r.cart ? summarize(r.cart) : null, note: "Placed by Agentcard when the approval landed." };
+      const conv = await agentcardAs<{
+        orders?: { order_id?: string | null; status?: string; merchant_name?: string }[];
+        last_checkout?: (Partial<BuyResponse> & { order_id?: string | null }) | null;
+      }>(conn.access_token, "GET", `/buy/conversations/${encodeURIComponent(r.conversation_id)}`);
+      const orderId =
+        conv.last_checkout?.order_id ??
+        conv.orders?.filter((o) => o.status !== "failed" && o.status !== "cancelled").at(-1)?.order_id ??
+        undefined;
+      if (orderId) {
+        return { status: "order_placed", conversation_id: r.conversation_id, order_id: orderId, cart: r.cart ? summarize(r.cart) : null, note: "Placed by Agentcard when the approval landed." };
       }
       if (conv.last_checkout && (conv.last_checkout.status as string) !== "error") r = { ...r, ...conv.last_checkout } as BuyResponse;
     }
