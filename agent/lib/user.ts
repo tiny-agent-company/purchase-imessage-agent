@@ -2,7 +2,7 @@
 // context) and a live connection token, refreshed when it is about to expire.
 
 import { agentcard, AgentcardError } from "./agentcard";
-import { connectionFor, firstTime, forgetConnection, phoneForSession, rememberPhone, saveConnection, unmark, type Connection } from "./store";
+import { connectionFor, firstTime, forgetConnection, mark, phoneForSession, rememberPhone, saveConnection, unmark, type Connection } from "./store";
 
 /**
  * The E.164 number of the user in this conversation. A text from them carries
@@ -91,7 +91,11 @@ export async function connectFromVaultSession(
     const code = e instanceof AgentcardError && typeof e.body === "object" && e.body
       ? (e.body as { error?: { code?: string } }).error?.code
       : undefined;
-    if (code === "account_verification_required") return "needs_code";
+    if (code === "account_verification_required") {
+      // The one case the code flow is for; connect_user checks this mark.
+      await mark(`needs_code:${phone}`);
+      return "needs_code";
+    }
     // not_linked (the event raced the link) or a blip: let the next event try again.
     await unmark(key);
     return "failed";

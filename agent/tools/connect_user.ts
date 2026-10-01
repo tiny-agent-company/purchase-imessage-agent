@@ -2,7 +2,7 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { agentcard, isSandbox } from "../lib/agentcard";
 import { phoneOf } from "../lib/user";
-import { connectionFor, rememberConnectAttempt } from "../lib/store";
+import { connectionFor, marked, rememberConnectAttempt } from "../lib/store";
 
 // Step one of buying: Agentcard texts the user a one-time code, they text it
 // back here, and verify_code turns that into the connection every /buy call
@@ -12,6 +12,10 @@ export default defineTool({
   description:
     "The fallback way to connect a user: only when the Vault link could not connect them because their Agentcard account already existed (the webhook says so), or when they say they already have an account. Agentcard sends a six-digit code to the number this conversation is with (or to an email address, if the user gives one because the text never arrived); the user sends it back and you call verify_code. Returns already_connected when there is nothing to do.",
   inputSchema: z.object({
+    user_has_account: z
+      .boolean()
+      .optional()
+      .describe("True only when the user themselves said they already have an Agentcard account. Without it, the code is sent only after the Vault link reported that their account already existed."),
     email: z
       .string()
       .email()
@@ -19,9 +23,16 @@ export default defineTool({
       .describe("Send the code to this email instead of texting the user's number. Only when the user asks for it or says the text never arrived."),
   }),
   label: { start: ({ email }) => (email ? "Email the user a sign-in code" : "Text the user a sign-in code") },
-  async execute({ email }, ctx) {
+  async execute({ email, user_has_account }, ctx) {
     const phone = await phoneOf(ctx);
     if (await connectionFor(phone)) return { already_connected: true };
+    // The Vault link is the sign-up. The code exists for one case: the link
+    // proved access to the vault but the account already existed (the webhook
+    // handler marks it), or the user says they have an account. Anything else
+    // is the model skipping the flow, which this refusal makes impossible.
+    if (!user_has_account && !(await marked(`needs_code:${phone}`))) {
+      return { refused: true, next: "Call create_vault_link instead: storing a card through it connects the user with no code. Call connect_user only after an [Agentcard] message says their account already existed, or when the user says so." };
+    }
 
     const attempt = await agentcard<{ id: string; channel: string; expires_at: string }>(
       "POST",
