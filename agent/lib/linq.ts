@@ -53,6 +53,42 @@ export async function sendLink(to: string, url: string): Promise<void> {
   });
 }
 
+export interface Card {
+  url: string;
+  /** Up to 64 characters. */
+  title?: string;
+  /** Up to 120 characters. */
+  subtitle?: string;
+  /** The button label, up to 24 characters. */
+  button?: string;
+}
+
+/**
+ * Send a native card: Linq's `link` experience (`action: "open"`), rendered by
+ * Linq's iMessage app with the title, subtitle and button we choose, opening
+ * our URL on tap. A card is the whole message. A recipient without the Linq
+ * app sees a static version built from the same copy; an SMS recipient cannot
+ * receive one, so the caller falls back to `sendLink` when Linq refuses.
+ */
+export async function sendCard(to: string, card: Card): Promise<void> {
+  const params: Record<string, string> = { url: card.url };
+  if (card.title) params.title = card.title.slice(0, 64);
+  if (card.subtitle) params.subtitle = card.subtitle.slice(0, 120);
+  if (card.button) params.button = card.button.slice(0, 24);
+  try {
+    await linq("POST", "/chats", {
+      from: await senderNumber(),
+      to: [to],
+      message: { experience: { name: "link", action: "open", params } },
+    });
+  } catch (e) {
+    // iMessage only (Linq errors 2018 / 4005 for SMS and RCS): the rich link
+    // card still carries the URL.
+    if (/2018|4005|iMessage/i.test(String(e))) return sendLink(to, card.url);
+    throw e;
+  }
+}
+
 /** Send an image (any https URL) to `to` as its own bubble. */
 export async function sendMedia(to: string, url: string): Promise<void> {
   await linq("POST", "/chats", {

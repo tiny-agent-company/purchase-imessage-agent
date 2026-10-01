@@ -2,7 +2,7 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { agentcardAs, AgentcardError } from "../lib/agentcard";
 import { phoneOf, userToken } from "../lib/user";
-import { sendLink } from "../lib/linq";
+import { sendCard } from "../lib/linq";
 import { catalogFor, rememberApproval, rememberCatalog, type Product } from "../lib/store";
 
 // One turn of Agentcard's Purchase API (POST /buy): an ask builds or refines
@@ -129,12 +129,17 @@ export default defineTool({
       if (conv.last_checkout && (conv.last_checkout.status as string) !== "error") r = { ...r, ...conv.last_checkout } as BuyResponse;
     }
 
-    // The approval link goes out from here, alone, as a rich link card. Handed
-    // to the model it ends up inside a sentence, and a link with words glued to
-    // it is a broken link on the phone.
+    // The approval link goes out from here as a native card with the amount
+    // and merchant on it. Handed to the model it ends up inside a sentence,
+    // and a link with words glued to it is a broken link on the phone.
     let approvalLinkSent = false;
     if (r.approval_url) {
-      await sendLink(phone, r.approval_url);
+      await sendCard(phone, {
+        url: r.approval_url,
+        title: r.cart ? `Approve ${money(r.cart.totalCents)} at ${r.cart.merchant_name}` : "Approve this purchase",
+        subtitle: "Face ID or Touch ID on your own card. Tax and shipping can move the final charge a little.",
+        button: "Approve",
+      });
       approvalLinkSent = true;
       // When Agentcard's webhook says this authorization was approved, the
       // conversation resumes on its own with the same confirm.
