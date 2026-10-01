@@ -109,14 +109,31 @@ const IMESSAGE_APP = process.env.AGENTCARD_IMESSAGE_TEAM_ID && process.env.AGENT
     }
   : undefined;
 
+/** Where a recipient without the app gets it: a TestFlight link now, the App Store page once listed. */
+const INSTALL_URL = process.env.AGENTCARD_IMESSAGE_INSTALL_URL;
+
+/**
+ * What a recipient sees when Messages cannot render the bubble: no app
+ * installed and no App Store id to offer. The Vault link still works in
+ * Safari, and the install link gets them the bubble next time.
+ */
+function fallbackText(bubble: VaultBubble): string {
+  const lines = [`${bubble.caption}: ${bubble.url}`];
+  if (INSTALL_URL) lines.push(`Get Agentcard for Messages to do this without leaving the chat: ${INSTALL_URL}`);
+  return lines.join("\n\n");
+}
+
 /**
  * Send a Vault link as an Agentcard bubble: an `imessage_app` part naming the
  * Agentcard iMessage app (apps/agentcard-imessage), with the Vault link as
  * its state URL. Tapping it opens the Vault page inside Messages with the
- * passkey served natively, so Face ID works without leaving the thread. The
- * recipient without the app gets a tap-to-install bubble; everyone else gets
- * `fallback_text`. Without AGENTCARD_IMESSAGE_TEAM_ID / _BUNDLE_ID the link
- * goes out as a plain `link` part and opens in Safari.
+ * passkey served natively, so Face ID works without leaving the thread.
+ *
+ * A recipient without the app sees Messages' own "Get the app" card when
+ * AGENTCARD_IMESSAGE_APP_STORE_ID is set, and otherwise the fallback text:
+ * the Vault link (works in Safari) plus the install link when
+ * AGENTCARD_IMESSAGE_INSTALL_URL is set. Without AGENTCARD_IMESSAGE_TEAM_ID /
+ * _BUNDLE_ID the link goes out as a plain `link` part and opens in Safari.
  */
 export async function sendVaultBubble(to: string, bubble: VaultBubble): Promise<void> {
   if (!IMESSAGE_APP) return sendLink(to, bubble.url);
@@ -130,7 +147,7 @@ export async function sendVaultBubble(to: string, bubble: VaultBubble): Promise<
             type: "imessage_app",
             app: IMESSAGE_APP,
             url: bubble.url,
-            fallback_text: `${bubble.caption}: ${bubble.url}`,
+            fallback_text: fallbackText(bubble),
             interactive: true,
             layout: { caption: bubble.caption, ...(bubble.subcaption ? { subcaption: bubble.subcaption } : {}) },
           },
