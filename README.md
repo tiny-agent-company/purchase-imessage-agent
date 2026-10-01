@@ -21,7 +21,7 @@ agent/
   channels/agentcard.ts       POST /agentcard/webhooks: on vault.session_linked the session is exchanged for the user's tokens; card-stored and checkout-approval events wake the conversation
   lib/agentcard.ts            org token + user-token calls (/buy runs as the user)
   lib/user.ts                 the phone behind the conversation, connection refresh
-  lib/linq.ts                 texts a message from the agent's Linq number
+  lib/linq.ts                 sendText / sendLink / sendMedia: text, rich link cards and photos as their own message parts
   lib/store.ts                Upstash Redis: connections, connect attempts, vault sessions
   tools/connect_user.ts       POST /api/v2/connect/start → Agentcard texts a code
   tools/verify_code.ts        POST /api/v2/connect/verify → the user token buy runs as
