@@ -2,7 +2,7 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { agentcardAs, AgentcardError } from "../lib/agentcard";
 import { phoneOf, userToken } from "../lib/user";
-import { sendLink } from "../lib/linq";
+import { sendVaultBubble } from "../lib/linq";
 import { catalogFor, rememberApproval, rememberCatalog, type Product } from "../lib/store";
 
 // One turn of Agentcard's Purchase API (POST /buy): an ask builds or refines
@@ -134,10 +134,19 @@ export default defineTool({
     // to it is a broken link on the phone.
     let approvalLinkSent = false;
     if (r.approval_url) {
-      // A rich link part, not a card: the approval is a passkey ceremony, and
-      // a card would open it in the Linq extension's web view, where WebAuthn
-      // is unavailable. A link bubble opens Safari.
-      await sendLink(phone, r.approval_url);
+      // An Agentcard bubble when the iMessage app is configured (the passkey
+      // runs natively inside Messages), otherwise a rich link part that opens
+      // Safari. Never a Linq card: its web view has no WebAuthn.
+      const cents = r.cart?.totalCents;
+      const merchant = r.cart?.merchant_name;
+      const approvalUrl = new URL(r.approval_url);
+      if (typeof cents === "number") approvalUrl.searchParams.set("amount", String(cents));
+      if (merchant) approvalUrl.searchParams.set("merchant", merchant);
+      await sendVaultBubble(phone, {
+        url: approvalUrl.toString(),
+        caption: typeof cents === "number" ? `Approve ${money(cents)}${merchant ? ` at ${merchant}` : ""}` : "Approve the purchase",
+        subcaption: "Agentcard",
+      });
       approvalLinkSent = true;
       // When Agentcard's webhook says this authorization was approved, the
       // conversation resumes on its own with the same confirm.

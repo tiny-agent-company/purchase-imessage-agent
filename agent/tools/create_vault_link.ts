@@ -1,7 +1,7 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { agentcard } from "../lib/agentcard";
-import { sendLink } from "../lib/linq";
+import { sendVaultBubble } from "../lib/linq";
 import { phoneOf, userToken } from "../lib/user";
 import { rememberVaultSession } from "../lib/store";
 
@@ -41,12 +41,11 @@ export default defineTool({
       conn ? { user_id: conn.user_id } : {},
     );
     await rememberVaultSession(session.id, ctx.session.id);
-    // A rich link part, not a card: a card opens its URL inside the Linq
-    // extension's web view, where passkeys (WebAuthn) are unavailable and the
-    // Vault falls back to "open this link in Safari". A link bubble opens
-    // Safari on tap, and Face ID works. It is still the whole message, so
-    // nothing can be glued to the URL.
-    await sendLink(phone, session.url);
+    // An Agentcard bubble when the iMessage app is configured (the passkey
+    // runs natively inside Messages), otherwise a rich link part that opens
+    // Safari. Never a Linq card: its web view has no WebAuthn. Either way the
+    // link is the whole message, so nothing can be glued to the URL.
+    await sendVaultBubble(phone, { url: session.url, caption: "Add your card", subcaption: "Agentcard Vault" });
 
     return {
       id: session.id,

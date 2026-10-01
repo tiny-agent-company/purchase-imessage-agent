@@ -92,6 +92,57 @@ export async function sendCard(to: string, card: Card): Promise<void> {
   }
 }
 
+export interface VaultBubble {
+  /** The Vault link itself (`/v?vs=…` or `/authorize?id=…`). */
+  url: string;
+  /** The bubble's caption, also used when the recipient has no iMessage app. */
+  caption: string;
+  subcaption?: string;
+}
+
+const IMESSAGE_APP = process.env.AGENTCARD_IMESSAGE_TEAM_ID && process.env.AGENTCARD_IMESSAGE_BUNDLE_ID
+  ? {
+      name: "Agentcard",
+      team_id: process.env.AGENTCARD_IMESSAGE_TEAM_ID,
+      bundle_id: process.env.AGENTCARD_IMESSAGE_BUNDLE_ID,
+      ...(process.env.AGENTCARD_IMESSAGE_APP_STORE_ID ? { app_store_id: process.env.AGENTCARD_IMESSAGE_APP_STORE_ID } : {}),
+    }
+  : undefined;
+
+/**
+ * Send a Vault link as an Agentcard bubble: an `imessage_app` part naming the
+ * Agentcard iMessage app (apps/agentcard-imessage), with the Vault link as
+ * its state URL. Tapping it opens the Vault page inside Messages with the
+ * passkey served natively, so Face ID works without leaving the thread. The
+ * recipient without the app gets a tap-to-install bubble; everyone else gets
+ * `fallback_text`. Without AGENTCARD_IMESSAGE_TEAM_ID / _BUNDLE_ID the link
+ * goes out as a plain `link` part and opens in Safari.
+ */
+export async function sendVaultBubble(to: string, bubble: VaultBubble): Promise<void> {
+  if (!IMESSAGE_APP) return sendLink(to, bubble.url);
+  try {
+    await linq("POST", "/chats", {
+      from: await senderNumber(),
+      to: [to],
+      message: {
+        parts: [
+          {
+            type: "imessage_app",
+            app: IMESSAGE_APP,
+            url: bubble.url,
+            fallback_text: `${bubble.caption}: ${bubble.url}`,
+            interactive: true,
+            layout: { caption: bubble.caption, ...(bubble.subcaption ? { subcaption: bubble.subcaption } : {}) },
+          },
+        ],
+      },
+    });
+  } catch (e) {
+    if (/2018|4005|iMessage/i.test(String(e))) return sendLink(to, bubble.url);
+    throw e;
+  }
+}
+
 /** Send an image (any https URL) to `to` as its own bubble. */
 export async function sendMedia(to: string, url: string): Promise<void> {
   await linq("POST", "/chats", {
