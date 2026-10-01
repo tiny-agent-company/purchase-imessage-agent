@@ -66,9 +66,12 @@ export interface Card {
 /**
  * Send a native card: Linq's `link` experience (`action: "open"`), rendered by
  * Linq's iMessage app with the title, subtitle and button we choose, opening
- * our URL on tap. A card is the whole message. A recipient without the Linq
- * app sees a static version built from the same copy; an SMS recipient cannot
- * receive one, so the caller falls back to `sendLink` when Linq refuses.
+ * our URL on tap, inside the Linq extension's web view. That web view has no
+ * WebAuthn, so anything that needs a passkey (the Vault link, the approval)
+ * goes as a `link` part instead and opens Safari. A card is the whole
+ * message. A recipient without the Linq app sees a static version built from
+ * the same copy; an SMS recipient cannot receive one, so the caller falls
+ * back to `sendLink` when Linq refuses.
  */
 export async function sendCard(to: string, card: Card): Promise<void> {
   const params: Record<string, string> = { url: card.url };

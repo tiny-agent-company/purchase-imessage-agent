@@ -1,7 +1,7 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { agentcard } from "../lib/agentcard";
-import { sendCard } from "../lib/linq";
+import { sendLink } from "../lib/linq";
 import { phoneOf, userToken } from "../lib/user";
 import { rememberVaultSession } from "../lib/store";
 
@@ -41,15 +41,12 @@ export default defineTool({
       conn ? { user_id: conn.user_id } : {},
     );
     await rememberVaultSession(session.id, ctx.session.id);
-    // The URL rides a native card with our own copy; the card is the whole
-    // message, so nothing can be glued to the link (which would fail its
-    // verification and land the user on the Vault's sign-in page).
-    await sendCard(phone, {
-      url: session.url,
-      title: conn ? "Add a card" : "Add your card",
-      subtitle: "Locked with Face ID or Touch ID.",
-      button: "Add card",
-    });
+    // A rich link part, not a card: a card opens its URL inside the Linq
+    // extension's web view, where passkeys (WebAuthn) are unavailable and the
+    // Vault falls back to "open this link in Safari". A link bubble opens
+    // Safari on tap, and Face ID works. It is still the whole message, so
+    // nothing can be glued to the URL.
+    await sendLink(phone, session.url);
 
     return {
       id: session.id,
