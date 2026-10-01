@@ -47,7 +47,7 @@ export default defineTool({
     await sendCard(phone, {
       url: session.url,
       title: conn ? "Add a card" : "Add your card",
-      subtitle: "Stored once in the Agentcard Vault, locked with Face ID or Touch ID. Your agent pays with it after you approve.",
+      subtitle: "Locked with Face ID or Touch ID.",
       button: "Add card",
     });
 

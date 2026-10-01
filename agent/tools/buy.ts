@@ -137,7 +137,7 @@ export default defineTool({
       await sendCard(phone, {
         url: r.approval_url,
         title: r.cart ? `Approve ${money(r.cart.totalCents)} at ${r.cart.merchant_name}` : "Approve this purchase",
-        subtitle: "Face ID or Touch ID on your own card. Tax and shipping can move the final charge a little.",
+        subtitle: "Approve with Face ID or Touch ID.",
         button: "Approve",
       });
       approvalLinkSent = true;
