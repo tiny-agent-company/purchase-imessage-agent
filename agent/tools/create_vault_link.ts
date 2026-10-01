@@ -1,7 +1,7 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { agentcard } from "../lib/agentcard";
-import { sendText } from "../lib/linq";
+import { sendLink } from "../lib/linq";
 import { phoneOf, userToken } from "../lib/user";
 import { rememberVaultSession } from "../lib/store";
 
@@ -41,9 +41,10 @@ export default defineTool({
       conn ? { user_id: conn.user_id } : {},
     );
     await rememberVaultSession(session.id, ctx.session.id);
-    // The URL is the whole message: a link with anything glued to it fails
-    // verification and lands the user on the Vault's sign-in page.
-    await sendText(phone, session.url);
+    // The URL is the whole message, as a rich link card: a link with anything
+    // glued to it fails verification and lands the user on the Vault's sign-in
+    // page, and a bare URL leaves the phone to build its own preview.
+    await sendLink(phone, session.url);
 
     return {
       id: session.id,

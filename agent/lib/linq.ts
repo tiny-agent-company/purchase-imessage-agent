@@ -1,5 +1,6 @@
-// Minimal Linq Partner API client, used to text a link as its own message.
-// The model never handles the URL, so nothing can get glued onto it.
+// Minimal Linq Partner API client. Text, rich link cards and photos each go
+// out as their own message part; the model never handles a URL, so nothing
+// can get glued onto it.
 
 const LINQ_API = "https://api.linqapp.com/api/partner/v3";
 
@@ -35,6 +36,20 @@ export async function sendText(to: string, text: string): Promise<void> {
     from: await senderNumber(),
     to: [to],
     message: { parts: [{ type: "text", value: text }] },
+  });
+}
+
+/**
+ * Send a URL as a `link` part: Linq renders it as a rich card (title,
+ * description and image from the page's OpenGraph tags) instead of a bare URL
+ * the phone has to preview itself. A link part must be the only part in its
+ * message, which is also why the model never gets to put words around it.
+ */
+export async function sendLink(to: string, url: string): Promise<void> {
+  await linq("POST", "/chats", {
+    from: await senderNumber(),
+    to: [to],
+    message: { parts: [{ type: "link", value: url }] },
   });
 }
 
