@@ -2,8 +2,9 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { agentcardAs, AgentcardError } from "../lib/agentcard";
 import { phoneOf, userToken } from "../lib/user";
-import { sendVaultBubble } from "../lib/linq";
+import { sendVaultBubble, sendLink } from "../lib/linq";
 import { catalogFor, rememberApproval, rememberCatalog, type Product } from "../lib/store";
+import { approvalIdFromUrl, connectUrlFromText } from "../lib/buy-links";
 
 // One turn of Agentcard's Purchase API (POST /buy): an ask builds or refines
 // a cart at a real merchant; a confirm places it. Runs as the connected user.
@@ -30,6 +31,10 @@ interface BuyResponse {
   catalog?: { merchant_name?: string; items?: CatalogItem[] } | null;
   status: "needs_input" | "order_placed" | "partially_placed" | "declined";
   reply: string | null;
+  // Multi-bubble surfaces (the iMessage relay) also get the turn split into ordered
+  // narration segments. A merchant-connect link can ride in one of these rather than
+  // the final reply, so the connect-link dispatch scans them too.
+  messages?: string[] | null;
   cart: Cart | null;
   carts?: Cart[];
   unmatched?: { requested?: string; reason?: string; detail?: string }[];
@@ -149,9 +154,24 @@ export default defineTool({
       });
       approvalLinkSent = true;
       // When Agentcard's webhook says this authorization was approved, the
-      // conversation resumes on its own with the same confirm.
-      const id = new URL(r.approval_url).searchParams.get("id");
+      // conversation resumes on its own with the same confirm. The id sits in
+      // the query on the old approval link and in the path on the new short one
+      // (/a/cauth_<id>.<secret>); approvalIdFromUrl reads both, so the approved
+      // webhook can find this pending confirm and wake the conversation.
+      const id = approvalIdFromUrl(r.approval_url);
       if (id && confirm) await rememberApproval(id, { eveSessionId: ctx.session.id, conversationId: r.conversation_id, hash: confirm });
+    }
+
+    // A merchant-connect link (e.g. DoorDash sign-in) comes back ONLY inside the
+    // reply/narration prose — the /buy response has no structured field for it — and
+    // the model is told never to relay a URL, so it would be dropped and the user left
+    // stuck. Dispatch it as its own link bubble (opens in Safari; the connect page needs
+    // no passkey, unlike the Vault/approval bubble) whenever a turn carries one.
+    let connectLinkSent = false;
+    const connectUrl = connectUrlFromText([r.reply, ...(r.messages ?? [])].filter(Boolean).join("\n"));
+    if (connectUrl) {
+      await sendLink(phone, connectUrl);
+      connectLinkSent = true;
     }
 
     return {
@@ -161,6 +181,7 @@ export default defineTool({
       cart: r.cart ? summarize(r.cart) : null,
       products,
       approval_link_sent: approvalLinkSent || undefined,
+      connect_link_sent: connectLinkSent || undefined,
       unmatched: r.unmatched?.length ? r.unmatched : undefined,
       decline_code: r.decline_code ?? undefined,
       order_id: r.order_id ?? undefined,
