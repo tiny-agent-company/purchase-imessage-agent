@@ -2,7 +2,7 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { agentcardAs, AgentcardError } from "../lib/agentcard";
 import { phoneOf, userToken } from "../lib/user";
-import { sendVaultBubble, sendLink } from "../lib/linq";
+import { sendLink } from "../lib/linq";
 import { catalogFor, rememberApproval, rememberCatalog, type Product } from "../lib/store";
 import { approvalIdFromUrl, connectUrlFromText } from "../lib/buy-links";
 
@@ -139,19 +139,19 @@ export default defineTool({
     // to it is a broken link on the phone.
     let approvalLinkSent = false;
     if (r.approval_url) {
-      // An Agentcard bubble when the iMessage app is configured (the passkey
-      // runs natively inside Messages), otherwise a rich link part that opens
-      // Safari. Never a Linq card: its web view has no WebAuthn.
+      // A rich link part that opens Safari — NOT an Agentcard iMessage bubble. The
+      // approval short link is app.agentcard.sh/a/<token>, a path the Agentcard iMessage
+      // app does not open (it claims the Vault /v and the /connect paths), so an
+      // imessage_app bubble for it silently never reached the chat — the add-card and
+      // connect bubbles deliver only because their paths are claimed. The approve page
+      // runs the passkey ceremony, which works in Safari, and a link part always
+      // delivers. amount + merchant stay on the URL for the approve page.
       const cents = r.cart?.totalCents;
       const merchant = r.cart?.merchant_name;
       const approvalUrl = new URL(r.approval_url);
       if (typeof cents === "number") approvalUrl.searchParams.set("amount", String(cents));
       if (merchant) approvalUrl.searchParams.set("merchant", merchant);
-      await sendVaultBubble(phone, {
-        url: approvalUrl.toString(),
-        caption: typeof cents === "number" ? `Approve ${money(cents)}${merchant ? ` at ${merchant}` : ""}` : "Approve the purchase",
-        subcaption: "Agentcard",
-      });
+      await sendLink(phone, approvalUrl.toString());
       approvalLinkSent = true;
       // When Agentcard's webhook says this authorization was approved, the
       // conversation resumes on its own with the same confirm. The id sits in
