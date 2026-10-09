@@ -2,8 +2,8 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { agentcardAs, AgentcardError } from "../lib/agentcard";
 import { phoneOf, userToken } from "../lib/user";
-import { sendLink } from "../lib/linq";
-import { catalogFor, rememberApproval, rememberCatalog, type Product } from "../lib/store";
+import { sendLink, sendText } from "../lib/linq";
+import { catalogFor, rememberApproval, rememberCatalog, rememberOrder, type Product } from "../lib/store";
 import { approvalIdFromUrl, connectUrlFromText } from "../lib/buy-links";
 
 // One turn of Agentcard's Purchase API (POST /buy): an ask builds or refines
@@ -129,6 +129,9 @@ export default defineTool({
         conv.orders?.filter((o) => o.status !== "failed" && o.status !== "cancelled").at(-1)?.order_id ??
         undefined;
       if (orderId) {
+        // Index the order so a later order.* webhook (a retailer cancel, or the
+        // confirmation if this wake→confirm relay misses) can find this conversation.
+        await rememberOrder(orderId, { eveSessionId: ctx.session.id, conversationId: r.conversation_id });
         return { status: "order_placed", conversation_id: r.conversation_id, order_id: orderId, cart: r.cart ? summarize(r.cart) : null, note: "Placed by Agentcard when the approval landed." };
       }
       if (conv.last_checkout && (conv.last_checkout.status as string) !== "error") r = { ...r, ...conv.last_checkout } as BuyResponse;
@@ -139,19 +142,19 @@ export default defineTool({
     // to it is a broken link on the phone.
     let approvalLinkSent = false;
     if (r.approval_url) {
-      // A rich link part that opens Safari — NOT an Agentcard iMessage bubble. The
-      // approval short link is app.agentcard.sh/a/<token>, a path the Agentcard iMessage
-      // app does not open (it claims the Vault /v and the /connect paths), so an
-      // imessage_app bubble for it silently never reached the chat — the add-card and
-      // connect bubbles deliver only because their paths are claimed. The approve page
-      // runs the passkey ceremony, which works in Safari, and a link part always
-      // delivers. amount + merchant stay on the URL for the approve page.
+      // Send the approval URL as plain TEXT, not a Linq `link` part. Linq turns a link
+      // part into a rich card by fetching the URL server-side; the approval short link
+      // app.agentcard.sh/a/<token> has no page to render for that fetch (unlike the
+      // /connect link — which is why the connect link delivers and this one did not), so
+      // Linq dropped the message and it never reached the chat. A text part is the base
+      // channel and always forwards, and iMessage auto-links the bare URL, so a tap opens
+      // the approve page in Safari where the passkey works. amount + merchant stay on the URL.
       const cents = r.cart?.totalCents;
       const merchant = r.cart?.merchant_name;
       const approvalUrl = new URL(r.approval_url);
       if (typeof cents === "number") approvalUrl.searchParams.set("amount", String(cents));
       if (merchant) approvalUrl.searchParams.set("merchant", merchant);
-      await sendLink(phone, approvalUrl.toString());
+      await sendText(phone, approvalUrl.toString());
       approvalLinkSent = true;
       // When Agentcard's webhook says this authorization was approved, the
       // conversation resumes on its own with the same confirm. The id sits in
@@ -173,6 +176,9 @@ export default defineTool({
       await sendLink(phone, connectUrl);
       connectLinkSent = true;
     }
+
+    // Index a placed order so an order.* webhook (retailer cancel / confirmation) can reach the user.
+    if (r.order_id) await rememberOrder(r.order_id, { eveSessionId: ctx.session.id, conversationId: r.conversation_id });
 
     return {
       status: r.status,
