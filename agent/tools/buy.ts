@@ -2,7 +2,7 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { agentcardAs, AgentcardError } from "../lib/agentcard";
 import { phoneOf, userToken } from "../lib/user";
-import { sendLink, sendText } from "../lib/linq";
+import { sendLink, sendCard } from "../lib/linq";
 import { catalogFor, rememberApproval, rememberCatalog, type Product } from "../lib/store";
 import { approvalIdFromUrl, connectUrlFromText } from "../lib/buy-links";
 
@@ -139,19 +139,25 @@ export default defineTool({
     // to it is a broken link on the phone.
     let approvalLinkSent = false;
     if (r.approval_url) {
-      // Send the approval URL as plain TEXT, not a Linq `link` part. Linq turns a link
-      // part into a rich card by fetching the URL server-side; the approval short link
-      // app.agentcard.sh/a/<token> has no page to render for that fetch (unlike the
-      // /connect link — which is why the connect link delivers and this one did not), so
-      // Linq dropped the message and it never reached the chat. A text part is the base
-      // channel and always forwards, and iMessage auto-links the bare URL, so a tap opens
-      // the approve page in Safari where the passkey works. amount + merchant stay on the URL.
+      // Send the approval as a Linq rich-link CARD (sendCard) — the only form Linq forwards
+      // to the line. Verified live: a sendLink link-part AND a plain-text URL both get DROPPED
+      // Linq->AgentPhone (cart-update texts arrive, but a URL does not unless it rides a card).
+      // A link-part card is built by Linq fetching the URL for OG tags, which fails for the
+      // app.agentcard.sh/a/<token> short link (no renderable page, unlike /connect); sendCard
+      // builds the card from OUR explicit title/subtitle/button, so it delivers no matter what
+      // the short link renders. This is how the approval delivered before #5152. amount +
+      // merchant stay on the URL for the approve page.
       const cents = r.cart?.totalCents;
       const merchant = r.cart?.merchant_name;
       const approvalUrl = new URL(r.approval_url);
       if (typeof cents === "number") approvalUrl.searchParams.set("amount", String(cents));
       if (merchant) approvalUrl.searchParams.set("merchant", merchant);
-      await sendText(phone, approvalUrl.toString());
+      await sendCard(phone, {
+        url: approvalUrl.toString(),
+        title: typeof cents === "number" ? `Approve ${money(cents)}${merchant ? ` at ${merchant}` : ""}` : "Approve this purchase",
+        subtitle: "Approve with Face ID or Touch ID.",
+        button: "Approve",
+      });
       approvalLinkSent = true;
       // When Agentcard's webhook says this authorization was approved, the
       // conversation resumes on its own with the same confirm. The id sits in
