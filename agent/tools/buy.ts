@@ -3,7 +3,7 @@ import { z } from "zod";
 import { agentcardAs, AgentcardError } from "../lib/agentcard";
 import { phoneOf, userToken } from "../lib/user";
 import { sendLink, sendText } from "../lib/linq";
-import { catalogFor, rememberApproval, rememberCatalog, rememberOrder, type Product } from "../lib/store";
+import { catalogFor, rememberApproval, rememberCatalog, type Product } from "../lib/store";
 import { approvalIdFromUrl, connectUrlFromText } from "../lib/buy-links";
 
 // One turn of Agentcard's Purchase API (POST /buy): an ask builds or refines
@@ -129,9 +129,6 @@ export default defineTool({
         conv.orders?.filter((o) => o.status !== "failed" && o.status !== "cancelled").at(-1)?.order_id ??
         undefined;
       if (orderId) {
-        // Index the order so a later order.* webhook (a retailer cancel, or the
-        // confirmation if this wake→confirm relay misses) can find this conversation.
-        await rememberOrder(orderId, { eveSessionId: ctx.session.id, conversationId: r.conversation_id });
         return { status: "order_placed", conversation_id: r.conversation_id, order_id: orderId, cart: r.cart ? summarize(r.cart) : null, note: "Placed by Agentcard when the approval landed." };
       }
       if (conv.last_checkout && (conv.last_checkout.status as string) !== "error") r = { ...r, ...conv.last_checkout } as BuyResponse;
@@ -176,9 +173,6 @@ export default defineTool({
       await sendLink(phone, connectUrl);
       connectLinkSent = true;
     }
-
-    // Index a placed order so an order.* webhook (retailer cancel / confirmation) can reach the user.
-    if (r.order_id) await rememberOrder(r.order_id, { eveSessionId: ctx.session.id, conversationId: r.conversation_id });
 
     return {
       status: r.status,
