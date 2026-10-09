@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { defineChannel, POST } from "eve/channels";
 import { agentcard } from "../lib/agentcard";
-import { approvalFor, eveSessionFor, firstTime, mark, phoneForSession } from "../lib/store";
+import { approvalFor, eveSessionFor, firstTime, mark, phoneForSession, sessionForOrder } from "../lib/store";
 import { connectFromVaultSession } from "../lib/user";
 
 // Agentcard delivers webhooks here (POST /agentcard/webhooks). When a user
@@ -66,6 +66,21 @@ export default defineChannel({
         if (!pending) return new Response("ok"); // not one of this agent's confirms
         const text = approvalNote(event, pending);
         if (text) waitUntil(attachSession(pending.eveSessionId).send(text, { auth: WEBHOOK_AUTH }));
+        return new Response("ok");
+      }
+
+      // A placed order's lifecycle changed after placement (the retail cancel/confirm
+      // backstop). order.* name the order, not a vault/auth session, so resolve the
+      // conversation by the order id stored when /buy placed it. NOTE: delivery of
+      // order.* requires the webhook endpoint to subscribe them (add order.placed /
+      // order.confirmed / order.updated to its enabled_events).
+      if (event.type.startsWith("order.")) {
+        const text = orderNote(event);
+        if (!text) return new Response("ok");
+        const orderId = String(event.data.order_id ?? "");
+        const placed = orderId ? await sessionForOrder(orderId) : null;
+        if (!placed) return new Response("ok"); // an order this agent did not place, or one that expired
+        waitUntil(attachSession(placed.eveSessionId).send(text, { auth: WEBHOOK_AUTH }));
         return new Response("ok");
       }
 
@@ -171,11 +186,51 @@ function approvalNote(event: Envelope, p: { conversationId: string; hash: string
         `[Agentcard] The user approved the purchase${amount ? ` (${amount})` : ""} with their passkey. ` +
         `Call buy now with confirm "${p.hash}" on conversation "${p.conversationId}" to place the order, then tell them the result. Do not ask them anything first.`
       );
-    case "checkout_authorization.declined":
-      return `[Agentcard] The user declined the purchase on the approval page${d.reason ? ` (${d.reason})` : ""}. Tell them it was not placed and ask what they would like to do.`;
+    case "checkout_authorization.declined": {
+      const reason = typeof d.reason === "string" ? d.reason : "";
+      // A card/processor refusal, not a user action (backend stamps reason
+      // `processor_refused` + a psp_error_code): say the CARD was declined.
+      if (reason === "processor_refused" || d.psp_error_code) {
+        return `[Agentcard] The user's card was declined, so the purchase was not placed. Tell them their card was declined and ask if they want to try a different card.`;
+      }
+      // The final price came out higher than approved and the backend blocked it.
+      if (reason === "amount_mismatch") {
+        return `[Agentcard] The final price came out higher than what the user approved, so the purchase was blocked and not placed. Tell them this and offer to re-approve at the correct total.`;
+      }
+      // Any other server/rule refusal (a spend rule, an expired session): not placed,
+      // and NOT the user's doing — never say they declined it.
+      if (reason) {
+        return `[Agentcard] The purchase was not placed (${reason}). Tell them it did not go through and ask what they would like to do; do not say they declined it.`;
+      }
+      // No reason: a bare decline is the user tapping "No" on the approval page.
+      return `[Agentcard] The user declined the purchase on the approval page. Tell them it was not placed and ask what they would like to do.`;
+    }
     case "checkout_authorization.expired":
       return `[Agentcard] The approval link expired before the user approved. Tell them, and offer to send a new one (a new confirm produces one).`;
     default:
+      return null;
+  }
+}
+
+/** What the agent hears when a PLACED order's lifecycle changes (the async retail paths). */
+function orderNote(event: Envelope): string | null {
+  const d = event.data;
+  switch (event.type) {
+    case "order.updated": {
+      // Only a terminal cancel needs a proactive message here; delivery stages are optional.
+      if (d.status !== "canceled") return null;
+      const why = typeof d.canceled_reason === "string" && d.canceled_reason ? ` (${d.canceled_reason})` : "";
+      return `[Agentcard] The store cancelled the user's order${why} after it was placed, and the charge has been refunded. Tell them the order will not arrive and that they have been refunded, and offer to try again or find an alternative. Do not say they did anything wrong.`;
+    }
+    case "order.confirmed": {
+      // The success backstop: the synchronous wake→buy(confirm) relay sometimes misses, so
+      // a confirmed order with no earlier "placed" message still reaches the user here.
+      const ref = typeof d.retailer_order_id === "string" && d.retailer_order_id ? ` ${d.retailer_order_id}` : "";
+      const when = typeof d.delivery_window === "string" && d.delivery_window ? `, arriving ${d.delivery_window}` : "";
+      return `[Agentcard] The user's order is confirmed by the store (order${ref}${when}). Tell them it's confirmed and share the arrival window if present.`;
+    }
+    default:
+      // NOT order.placed / order.failed: the buy tool already surfaces a synchronous placement result.
       return null;
   }
 }

@@ -122,6 +122,28 @@ export async function approvalFor(authorizationId: string): Promise<PendingAppro
   return (await redis().get<PendingApproval>(k(`auth:${authorizationId}`))) ?? null;
 }
 
+// ── Placed orders (for the order.* webhook) ───────────────────────────────
+
+export interface PlacedOrder {
+  eveSessionId: string;
+  conversationId: string;
+}
+
+/**
+ * Which conversation placed an order, so an order.* webhook (cancelled,
+ * confirmed) can resume it. order.* events name the order, not a vault/auth
+ * session, so without this index the relay cannot find the user to notify.
+ * Kept well past the 48h cancellation-watch window so a late retailer cancel
+ * still finds them.
+ */
+export async function rememberOrder(orderId: string, o: PlacedOrder, ttlSeconds = 7 * DAY) {
+  await redis().set(k(`order:${orderId}`), o, { ex: ttlSeconds });
+}
+
+export async function sessionForOrder(orderId: string): Promise<PlacedOrder | null> {
+  return (await redis().get<PlacedOrder>(k(`order:${orderId}`))) ?? null;
+}
+
 // ── Phone per conversation ───────────────────────────────────────────────
 
 /**
